@@ -1,0 +1,294 @@
+import unittest
+from math import exp
+import torch
+from torch.distributions import LKJCholesky
+from gpytorch.priors import LKJCholeskyFactorPrior, LKJCovariancePrior, LKJPrior, SmoothedBoxPrior
+from gpytorch.priors.lkj_prior import _is_valid_correlation_matrix, _is_valid_correlation_matrix_cholesky_factor
+from gpytorch.test.utils import approx_equal, least_used_cuda_device
+import torch
+import numpy as np
+import pytest
+
+def complexObj(string):
+    try:
+        if isinstance(string, torch.Tensor):
+            return np.array2string(string.detach().numpy(), precision=50, separator=',').replace('\n', '')
+    except:
+        pass
+    if isinstance(string, np.ndarray):
+        return np.array2string(string, precision=50, separator=',').replace('\n', '')
+    if isinstance(string, list):
+        for i in string:
+            return '[{0}]'.format(','.join([complexObj(i)]))
+    try:
+        if isinstance(string, tf.Tensor):
+            return np.array2string(string.eval(), precision=50, separator=',').replace('\n', '')
+    except:
+        pass
+    return str(string)
+
+class TestLKJPrior(unittest.TestCase):
+
+    def test_lkj_prior_to_gpu(self):
+        if torch.cuda.is_available():
+            prior = LKJPrior(2, 1.0).cuda()
+            self.assertEqual(prior.eta.device.type, 'cuda')
+
+    def test_lkj_prior_validate_args(self):
+        LKJPrior(2, 1.0, validate_args=True)
+        with self.assertRaises(ValueError):
+            LKJPrior(1.5, 1.0, validate_args=True)
+        with self.assertRaises(ValueError):
+            LKJPrior(2, (- 1.0), validate_args=True)
+
+    @pytest.mark.usefixtures('show_guts')
+    @pytest.mark.usefixtures('show_guts')
+    def test_lkj_prior_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        prior = LKJPrior(2, torch.tensor(0.5, device=device))
+        dist = LKJCholesky(2, torch.tensor(0.5, device=device))
+        S = torch.eye(2, device=device)
+        S_chol = torch.linalg.cholesky(S)
+        val_17 = prior.log_prob(S)
+        print(('log>>>%s' % complexObj(val_17)))
+        val_18 = dist.log_prob(S_chol)
+        print(('log>>>%s' % complexObj(val_18)))
+        val_33 = val_17
+        print(('log>>>%s' % complexObj(val_33)))
+        val_34 = val_18
+        print(('log>>>%s' % complexObj(val_34)))
+        self.assertAlmostEqual(val_33, val_34, places=4)
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.linalg.cholesky(S)
+        self.assertTrue(approx_equal(prior.log_prob(S), dist.log_prob(S_chol)))
+        with self.assertRaises(ValueError):
+            prior.log_prob(torch.eye(3, device=device))
+
+    def test_lkj_prior_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_prior_log_prob(cuda=True)
+
+    def test_lkj_prior_batch_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        prior = LKJPrior(2, torch.tensor([0.5, 1.5], device=device))
+        dist = LKJCholesky(2, torch.tensor([0.5, 1.5], device=device))
+        S = torch.eye(2, device=device)
+        S_chol = torch.linalg.cholesky(S)
+        self.assertTrue(approx_equal(prior.log_prob(S), dist.log_prob(S_chol)))
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.linalg.cholesky(S)
+        self.assertTrue(approx_equal(prior.log_prob(S), dist.log_prob(S_chol)))
+        with self.assertRaises(ValueError):
+            prior.log_prob(torch.eye(3, device=device))
+
+    def test_lkj_prior_batch_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_prior_batch_log_prob(cuda=True)
+
+    def test_lkj_prior_sample(self, seed=0):
+        torch.random.manual_seed(seed)
+        prior = LKJPrior(n=5, eta=0.5)
+        random_samples = prior.sample(torch.Size((8,)))
+        self.assertTrue(_is_valid_correlation_matrix(random_samples))
+        max_non_symm = (random_samples - random_samples.transpose((- 1), (- 2))).abs().max()
+        val_19 = max_non_symm
+        print(('log>>>%s' % complexObj(val_19)))
+        val_20 = 0.0001
+        print(('log>>>%s' % complexObj(val_20)))
+        val_35 = val_19
+        print(('log>>>%s' % complexObj(val_35)))
+        val_36 = val_20
+        print(('log>>>%s' % complexObj(val_36)))
+        self.assertLess(val_35, val_36)
+        self.assertEqual(random_samples.shape, torch.Size((8, 5, 5)))
+
+class TestLKJCholeskyFactorPrior(unittest.TestCase):
+
+    def test_lkj_cholesky_factor_prior_to_gpu(self):
+        if torch.cuda.is_available():
+            prior = LKJCholeskyFactorPrior(2, 1.0).cuda()
+            self.assertEqual(prior.eta.device.type, 'cuda')
+            self.assertEqual(prior.C.device.type, 'cuda')
+
+    def test_lkj_cholesky_factor_prior_validate_args(self):
+        LKJCholeskyFactorPrior(2, 1.0, validate_args=True)
+        with self.assertRaises(ValueError):
+            LKJCholeskyFactorPrior(1.5, 1.0, validate_args=True)
+        with self.assertRaises(ValueError):
+            LKJCholeskyFactorPrior(2, (- 1.0), validate_args=True)
+
+    def test_lkj_cholesky_factor_prior_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        prior = LKJCholeskyFactorPrior(2, torch.tensor(0.5, device=device))
+        dist = LKJCholesky(2, torch.tensor(0.5, device=device))
+        S = torch.eye(2, device=device)
+        S_chol = torch.linalg.cholesky(S)
+        val_21 = prior.log_prob(S_chol)
+        print(('log>>>%s' % complexObj(val_21)))
+        val_22 = dist.log_prob(S_chol)
+        print(('log>>>%s' % complexObj(val_22)))
+        val_37 = val_21
+        print(('log>>>%s' % complexObj(val_37)))
+        val_38 = val_22
+        print(('log>>>%s' % complexObj(val_38)))
+        self.assertAlmostEqual(val_37, val_38, places=4)
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S_chol.device)])
+        S_chol = torch.stack([torch.linalg.cholesky(Si) for Si in S])
+        self.assertTrue(approx_equal(prior.log_prob(S_chol), dist.log_prob(S_chol)))
+
+    def test_lkj_cholesky_factor_prior_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_cholesky_factor_prior_log_prob(cuda=True)
+
+    def test_lkj_cholesky_factor_prior_batch_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        prior = LKJCholeskyFactorPrior(2, torch.tensor([0.5, 1.5], device=device))
+        dist = LKJCholesky(2, torch.tensor([0.5, 1.5], device=device))
+        S = torch.eye(2, device=device)
+        S_chol = torch.linalg.cholesky(S)
+        self.assertTrue(approx_equal(prior.log_prob(S_chol), dist.log_prob(S_chol)))
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.stack([torch.linalg.cholesky(Si) for Si in S])
+        self.assertTrue(approx_equal(prior.log_prob(S_chol), dist.log_prob(S_chol)))
+
+    def test_lkj_cholesky_factor_prior_batch_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_cholesky_factor_prior_batch_log_prob(cuda=True)
+
+    def test_lkj_prior_sample(self):
+        prior = LKJCholeskyFactorPrior(2, 0.5)
+        random_samples = prior.sample(torch.Size((6,)))
+        self.assertTrue(_is_valid_correlation_matrix_cholesky_factor(random_samples))
+        self.assertEqual(random_samples.shape, torch.Size((6, 2, 2)))
+
+class TestLKJCovariancePrior(unittest.TestCase):
+
+    def test_lkj_covariance_prior_to_gpu(self):
+        if torch.cuda.is_available():
+            sd_prior = SmoothedBoxPrior(exp((- 1)), exp(1))
+            prior = LKJCovariancePrior(2, 1.0, sd_prior).cuda()
+            self.assertEqual(prior.correlation_prior.eta.device.type, 'cuda')
+            self.assertEqual(prior.correlation_prior.C.device.type, 'cuda')
+            self.assertEqual(prior.sd_prior.a.device.type, 'cuda')
+
+    def test_lkj_covariance_prior_validate_args(self):
+        sd_prior = SmoothedBoxPrior(exp((- 1)), exp(1), validate_args=True)
+        LKJCovariancePrior(2, 1.0, sd_prior)
+        with self.assertRaises(ValueError):
+            LKJCovariancePrior(1.5, 1.0, sd_prior, validate_args=True)
+        with self.assertRaises(ValueError):
+            LKJCovariancePrior(2, (- 1.0), sd_prior, validate_args=True)
+
+    def test_lkj_covariance_prior_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        sd_prior = SmoothedBoxPrior(exp((- 1)), exp(1))
+        if cuda:
+            sd_prior = sd_prior.cuda()
+        prior = LKJCovariancePrior(2, torch.tensor(0.5, device=device), sd_prior)
+        S = torch.eye(2, device=device)
+        corr_dist = LKJCholesky(2, torch.tensor(0.5, device=device))
+        dist_log_prob = (corr_dist.log_prob(S) + sd_prior.log_prob(S.diagonal(dim1=(- 1), dim2=(- 2))).sum())
+        val_23 = prior.log_prob(S)
+        print(('log>>>%s' % complexObj(val_23)))
+        val_24 = dist_log_prob
+        print(('log>>>%s' % complexObj(val_24)))
+        val_39 = val_23
+        print(('log>>>%s' % complexObj(val_39)))
+        val_40 = val_24
+        print(('log>>>%s' % complexObj(val_40)))
+        self.assertAlmostEqual(val_39, val_40, places=4)
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.linalg.cholesky(S)
+        dist_log_prob = (corr_dist.log_prob(S_chol) + sd_prior.log_prob(torch.diagonal(S, dim1=(- 2), dim2=(- 1))))
+        self.assertTrue(approx_equal(prior.log_prob(S), dist_log_prob))
+
+    def test_lkj_covariance_prior_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_covariance_prior_log_prob(cuda=True)
+
+    def test_lkj_covariance_prior_log_prob_hetsd(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        a = torch.tensor([exp((- 1)), exp((- 2))], device=device)
+        b = torch.tensor([exp(1), exp(2)], device=device)
+        sd_prior = SmoothedBoxPrior(a, b)
+        prior = LKJCovariancePrior(2, torch.tensor(0.5, device=device), sd_prior)
+        corr_dist = LKJCholesky(2, torch.tensor(0.5, device=device))
+        S = torch.eye(2, device=device)
+        dist_log_prob = (corr_dist.log_prob(S) + sd_prior.log_prob(S.diagonal(dim1=(- 1), dim2=(- 2))).sum())
+        val_25 = prior.log_prob(S)
+        print(('log>>>%s' % complexObj(val_25)))
+        val_26 = dist_log_prob
+        print(('log>>>%s' % complexObj(val_26)))
+        val_41 = val_25
+        print(('log>>>%s' % complexObj(val_41)))
+        val_42 = val_26
+        print(('log>>>%s' % complexObj(val_42)))
+        self.assertAlmostEqual(val_41, val_42, places=4)
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.linalg.cholesky(S)
+        dist_log_prob = (corr_dist.log_prob(S_chol) + sd_prior.log_prob(torch.diagonal(S, dim1=(- 2), dim2=(- 1))))
+        self.assertTrue(approx_equal(prior.log_prob(S), dist_log_prob))
+
+    def test_lkj_covariance_prior_log_prob_hetsd_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_covariance_prior_log_prob_hetsd(cuda=True)
+
+    def test_lkj_covariance_prior_batch_log_prob(self, cuda=False):
+        device = (torch.device('cuda') if cuda else torch.device('cpu'))
+        v = torch.ones(2, 1, device=device)
+        sd_prior = SmoothedBoxPrior((exp((- 1)) * v), (exp(1) * v))
+        prior = LKJCovariancePrior(2, torch.tensor([0.5, 1.5], device=device), sd_prior)
+        corr_dist = LKJCholesky(2, torch.tensor([0.5, 1.5], device=device))
+        S = torch.eye(2, device=device)
+        dist_log_prob = (corr_dist.log_prob(S) + sd_prior.log_prob(S.diagonal(dim1=(- 1), dim2=(- 2))))
+        val_27 = (prior.log_prob(S) - dist_log_prob).abs().sum()
+        print(('log>>>%s' % complexObj(val_27)))
+        val_28 = 0.0001
+        print(('log>>>%s' % complexObj(val_28)))
+        val_43 = val_27
+        print(('log>>>%s' % complexObj(val_43)))
+        val_44 = val_28
+        print(('log>>>%s' % complexObj(val_44)))
+        self.assertLessEqual(val_43, val_44)
+        S = torch.stack([S, torch.tensor([[1.0, 0.5], [0.5, 1]], device=S.device)])
+        S_chol = torch.linalg.cholesky(S)
+        dist_log_prob = (corr_dist.log_prob(S_chol) + sd_prior.log_prob(torch.diagonal(S, dim1=(- 2), dim2=(- 1))))
+        val_29 = (prior.log_prob(S) - dist_log_prob).abs().sum()
+        print(('log>>>%s' % complexObj(val_29)))
+        val_30 = 0.0001
+        print(('log>>>%s' % complexObj(val_30)))
+        val_45 = val_29
+        print(('log>>>%s' % complexObj(val_45)))
+        val_46 = val_30
+        print(('log>>>%s' % complexObj(val_46)))
+        self.assertLessEqual(val_45, val_46)
+
+    def test_lkj_covariance_prior_batch_log_prob_cuda(self):
+        if torch.cuda.is_available():
+            with least_used_cuda_device():
+                self.test_lkj_covariance_prior_batch_log_prob(cuda=True)
+
+    def test_lkj_prior_sample(self):
+        prior = LKJCovariancePrior(2, 0.5, sd_prior=SmoothedBoxPrior(exp((- 1)), exp(1)))
+        random_samples = prior.sample(torch.Size((6,)))
+        min_eval = torch.linalg.eigh(random_samples)[0].min()
+        self.assertTrue((min_eval >= 0))
+        max_non_symm = (random_samples - random_samples.transpose((- 1), (- 2))).abs().max()
+        val_31 = max_non_symm
+        print(('log>>>%s' % complexObj(val_31)))
+        val_32 = 0.0001
+        print(('log>>>%s' % complexObj(val_32)))
+        val_47 = val_31
+        print(('log>>>%s' % complexObj(val_47)))
+        val_48 = val_32
+        print(('log>>>%s' % complexObj(val_48)))
+        self.assertLess(val_47, val_48)
+        self.assertEqual(random_samples.shape, torch.Size((6, 2, 2)))
+if (__name__ == '__main__'):
+    unittest.main()

@@ -1,0 +1,71 @@
+import math
+import unittest
+import torch
+from gpytorch.kernels import RQKernel
+from gpytorch.test.base_kernel_test_case import BaseKernelTestCase
+import torch
+import pytest
+import numpy as np
+
+def sample_to_string(mystr):
+    if isinstance(mystr, list):
+        return '[{0}]'.format(','.join([sample_to_string(i) for i in mystr]))
+    if isinstance(mystr, np.ndarray):
+        return np.array2string(mystr, max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    try:
+        if isinstance(mystr, torch.Tensor):
+            return np.array2string(mystr.detach().numpy(), max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    except:
+        pass
+    try:
+        if isinstance(mystr, tf.Tensor):
+            with tf.Session():
+                return np.array2string(mystr.eval(), max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    except:
+        pass
+    return str(mystr)
+import torch
+import numpy as np
+import pytest
+
+@pytest.fixture(scope='session')
+def show_guts():
+    npseed = np.random.randint(np.iinfo(np.int32).max)
+    np.random.seed(npseed)
+    print(('\nnp.random seed: %s' % npseed))
+    torchseed = np.random.randint(np.iinfo(np.int64).max)
+    torch.manual_seed(torchseed)
+    print(('\ntorch seed: %s' % torchseed))
+
+def sample_to_string(mystr):
+    if isinstance(mystr, list):
+        return '[{0}]'.format(','.join([sample_to_string(i) for i in mystr]))
+    if isinstance(mystr, np.ndarray):
+        return np.array2string(mystr, max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    try:
+        if isinstance(mystr, torch.Tensor):
+            return np.array2string(mystr.detach().numpy(), max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    except:
+        pass
+    try:
+        if isinstance(mystr, tf.Tensor):
+            with tf.Session():
+                return np.array2string(mystr.eval(), max_line_width=np.inf, precision=100, separator=',', threshold=np.inf).replace('\n', '')
+    except:
+        pass
+    return str(mystr)
+
+class TestRQKernel(unittest.TestCase, BaseKernelTestCase):
+
+    def create_kernel_no_ard(self, **kwargs):
+        return RQKernel(**kwargs)
+
+    def create_kernel_ard(self, num_dims, **kwargs):
+        return RQKernel(ard_num_dims=num_dims, **kwargs)
+
+    @pytest.mark.usefixtures('show_guts')
+    @pytest.mark.usefixtures('buffer')
+    @pytest.mark.usefixtures('buffer')
+    def test_ard(self):
+        a = torch.tensor([[1, 2], [2, 4]], dtype=torch.float)
+        b = torch.tensor([[1, 3], [0, 4]], dtype=torch.float)

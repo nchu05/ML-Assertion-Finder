@@ -1,0 +1,327 @@
+import math
+import unittest
+import torch
+from torch import sigmoid
+from torch.nn.functional import softplus
+import gpytorch
+from gpytorch.test.base_test_case import BaseTestCase
+import torch
+import numpy as np
+import pytest
+
+def complexObj(string):
+    try:
+        if isinstance(string, torch.Tensor):
+            return np.array2string(string.detach().numpy(), precision=50, separator=',').replace('\n', '')
+    except:
+        pass
+    if isinstance(string, np.ndarray):
+        return np.array2string(string, precision=50, separator=',').replace('\n', '')
+    if isinstance(string, list):
+        for i in string:
+            return '[{0}]'.format(','.join([complexObj(i)]))
+    try:
+        if isinstance(string, tf.Tensor):
+            return np.array2string(string.eval(), precision=50, separator=',').replace('\n', '')
+    except:
+        pass
+    return str(string)
+
+class ExactGPModel(gpytorch.models.ExactGP):
+
+    def __init__(self, train_x, train_y, likelihood):
+        super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+class TestInterval(unittest.TestCase, BaseTestCase):
+
+    def test_transform_float_bounds(self):
+        constraint = gpytorch.constraints.Interval(1.0, 5.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.transform(v)
+        actual_value = (((5.0 - 1.0) * sigmoid(v)) + 1.0)
+        val_33 = value
+        print(('log>>>%s' % complexObj(val_33)))
+        val_34 = actual_value
+        print(('log>>>%s' % complexObj(val_34)))
+        val_65 = val_33
+        print(('log>>>%s' % complexObj(val_65)))
+        val_66 = val_34
+        print(('log>>>%s' % complexObj(val_66)))
+        self.assertAllClose(val_65, val_66)
+
+    def test_inverse_transform_float_bounds(self):
+        constraint = gpytorch.constraints.Interval(1.0, 5.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_35 = v
+        print(('log>>>%s' % complexObj(val_35)))
+        val_36 = value
+        print(('log>>>%s' % complexObj(val_36)))
+        val_67 = val_35
+        print(('log>>>%s' % complexObj(val_67)))
+        val_68 = val_36
+        print(('log>>>%s' % complexObj(val_68)))
+        self.assertAllClose(val_67, val_68)
+
+    def test_transform_tensor_bounds(self):
+        constraint = gpytorch.constraints.Interval(torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0]))
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.transform(v)
+        actual_value = v.clone()
+        actual_value[0] = (((3.0 - 1.0) * sigmoid(v[0])) + 1.0)
+        actual_value[1] = (((4.0 - 2.0) * sigmoid(v[1])) + 2.0)
+        val_37 = value
+        print(('log>>>%s' % complexObj(val_37)))
+        val_38 = actual_value
+        print(('log>>>%s' % complexObj(val_38)))
+        val_69 = val_37
+        print(('log>>>%s' % complexObj(val_69)))
+        val_70 = val_38
+        print(('log>>>%s' % complexObj(val_70)))
+        self.assertAllClose(val_69, val_70)
+
+    def test_inverse_transform_tensor_bounds(self):
+        constraint = gpytorch.constraints.Interval(torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0]))
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_39 = v
+        print(('log>>>%s' % complexObj(val_39)))
+        val_40 = value
+        print(('log>>>%s' % complexObj(val_40)))
+        val_71 = val_39
+        print(('log>>>%s' % complexObj(val_71)))
+        val_72 = val_40
+        print(('log>>>%s' % complexObj(val_72)))
+        self.assertAllClose(val_71, val_72)
+
+    def test_initial_value(self):
+        constraint = gpytorch.constraints.Interval(1.0, 5.0, transform=None, initial_value=3.0)
+        lkhd = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=constraint)
+        self.assertEqual(lkhd.noise.item(), 3.0)
+
+    def test_error_on_infinite(self):
+        err_msg = 'Cannot make an Interval directly with non-finite bounds'
+        with self.assertRaisesRegex(ValueError, err_msg):
+            gpytorch.constraints.Interval(0.0, math.inf)
+        with self.assertRaisesRegex(ValueError, err_msg):
+            gpytorch.constraints.Interval((- math.inf), 0.0)
+
+class TestGreaterThan(unittest.TestCase, BaseTestCase):
+
+    def test_transform_float_greater_than(self):
+        constraint = gpytorch.constraints.GreaterThan(1.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.transform(v)
+        actual_value = (softplus(v) + 1.0)
+        val_41 = value
+        print(('log>>>%s' % complexObj(val_41)))
+        val_42 = actual_value
+        print(('log>>>%s' % complexObj(val_42)))
+        val_73 = val_41
+        print(('log>>>%s' % complexObj(val_73)))
+        val_74 = val_42
+        print(('log>>>%s' % complexObj(val_74)))
+        self.assertAllClose(val_73, val_74)
+
+    def test_transform_tensor_greater_than(self):
+        constraint = gpytorch.constraints.GreaterThan([1.0, 2.0])
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.transform(v)
+        actual_value = v.clone()
+        actual_value[0] = (softplus(v[0]) + 1.0)
+        actual_value[1] = (softplus(v[1]) + 2.0)
+        val_43 = value
+        print(('log>>>%s' % complexObj(val_43)))
+        val_44 = actual_value
+        print(('log>>>%s' % complexObj(val_44)))
+        val_75 = val_43
+        print(('log>>>%s' % complexObj(val_75)))
+        val_76 = val_44
+        print(('log>>>%s' % complexObj(val_76)))
+        self.assertAllClose(val_75, val_76)
+
+    def test_inverse_transform_float_greater_than(self):
+        constraint = gpytorch.constraints.GreaterThan(1.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_45 = value
+        print(('log>>>%s' % complexObj(val_45)))
+        val_46 = v
+        print(('log>>>%s' % complexObj(val_46)))
+        val_77 = val_45
+        print(('log>>>%s' % complexObj(val_77)))
+        val_78 = val_46
+        print(('log>>>%s' % complexObj(val_78)))
+        self.assertAllClose(val_77, val_78)
+
+    def test_inverse_transform_tensor_greater_than(self):
+        constraint = gpytorch.constraints.GreaterThan([1.0, 2.0])
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_47 = value
+        print(('log>>>%s' % complexObj(val_47)))
+        val_48 = v
+        print(('log>>>%s' % complexObj(val_48)))
+        val_79 = val_47
+        print(('log>>>%s' % complexObj(val_79)))
+        val_80 = val_48
+        print(('log>>>%s' % complexObj(val_80)))
+        self.assertAllClose(val_79, val_80)
+
+class TestLessThan(unittest.TestCase, BaseTestCase):
+
+    def test_transform_float_less_than(self):
+        constraint = gpytorch.constraints.LessThan(1.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.transform(v)
+        actual_value = ((- softplus((- v))) + 1.0)
+        val_49 = value
+        print(('log>>>%s' % complexObj(val_49)))
+        val_50 = actual_value
+        print(('log>>>%s' % complexObj(val_50)))
+        val_81 = val_49
+        print(('log>>>%s' % complexObj(val_81)))
+        val_82 = val_50
+        print(('log>>>%s' % complexObj(val_82)))
+        self.assertAllClose(val_81, val_82)
+
+    def test_transform_tensor_less_than(self):
+        constraint = gpytorch.constraints.LessThan([1.0, 2.0])
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.transform(v)
+        actual_value = v.clone()
+        actual_value[0] = ((- softplus((- v[0]))) + 1.0)
+        actual_value[1] = ((- softplus((- v[1]))) + 2.0)
+        val_51 = value
+        print(('log>>>%s' % complexObj(val_51)))
+        val_52 = actual_value
+        print(('log>>>%s' % complexObj(val_52)))
+        val_83 = val_51
+        print(('log>>>%s' % complexObj(val_83)))
+        val_84 = val_52
+        print(('log>>>%s' % complexObj(val_84)))
+        self.assertAllClose(val_83, val_84)
+
+    def test_inverse_transform_float_less_than(self):
+        constraint = gpytorch.constraints.LessThan(1.0)
+        v = torch.tensor((- 3.0))
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_53 = value
+        print(('log>>>%s' % complexObj(val_53)))
+        val_54 = v
+        print(('log>>>%s' % complexObj(val_54)))
+        val_85 = val_53
+        print(('log>>>%s' % complexObj(val_85)))
+        val_86 = val_54
+        print(('log>>>%s' % complexObj(val_86)))
+        self.assertAllClose(val_85, val_86)
+
+    def test_inverse_transform_tensor_less_than(self):
+        constraint = gpytorch.constraints.LessThan([1.0, 2.0])
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_55 = value
+        print(('log>>>%s' % complexObj(val_55)))
+        val_56 = v
+        print(('log>>>%s' % complexObj(val_56)))
+        val_87 = val_55
+        print(('log>>>%s' % complexObj(val_87)))
+        val_88 = val_56
+        print(('log>>>%s' % complexObj(val_88)))
+        self.assertAllClose(val_87, val_88)
+
+class TestPositive(unittest.TestCase, BaseTestCase):
+
+    def test_transform_float_positive(self):
+        constraint = gpytorch.constraints.Positive()
+        v = torch.tensor((- 3.0))
+        value = constraint.transform(v)
+        actual_value = softplus(v)
+        val_57 = value
+        print(('log>>>%s' % complexObj(val_57)))
+        val_58 = actual_value
+        print(('log>>>%s' % complexObj(val_58)))
+        val_89 = val_57
+        print(('log>>>%s' % complexObj(val_89)))
+        val_90 = val_58
+        print(('log>>>%s' % complexObj(val_90)))
+        self.assertAllClose(val_89, val_90)
+
+    def test_transform_tensor_positive(self):
+        constraint = gpytorch.constraints.Positive()
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.transform(v)
+        actual_value = v.clone()
+        actual_value[0] = softplus(v[0])
+        actual_value[1] = softplus(v[1])
+        val_59 = value
+        print(('log>>>%s' % complexObj(val_59)))
+        val_60 = actual_value
+        print(('log>>>%s' % complexObj(val_60)))
+        val_91 = val_59
+        print(('log>>>%s' % complexObj(val_91)))
+        val_92 = val_60
+        print(('log>>>%s' % complexObj(val_92)))
+        self.assertAllClose(val_91, val_92)
+
+    def test_inverse_transform_float_positive(self):
+        constraint = gpytorch.constraints.Positive()
+        v = torch.tensor((- 3.0))
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_61 = value
+        print(('log>>>%s' % complexObj(val_61)))
+        val_62 = v
+        print(('log>>>%s' % complexObj(val_62)))
+        val_93 = val_61
+        print(('log>>>%s' % complexObj(val_93)))
+        val_94 = val_62
+        print(('log>>>%s' % complexObj(val_94)))
+        self.assertAllClose(val_93, val_94)
+
+    def test_inverse_transform_tensor_positive(self):
+        constraint = gpytorch.constraints.Positive()
+        v = torch.tensor([(- 3.0), (- 2.0)])
+        value = constraint.inverse_transform(constraint.transform(v))
+        val_63 = value
+        print(('log>>>%s' % complexObj(val_63)))
+        val_64 = v
+        print(('log>>>%s' % complexObj(val_64)))
+        val_95 = val_63
+        print(('log>>>%s' % complexObj(val_95)))
+        val_96 = val_64
+        print(('log>>>%s' % complexObj(val_96)))
+        self.assertAllClose(val_95, val_96)
+
+class TestConstraintNaming(unittest.TestCase, BaseTestCase):
+
+    def test_constraint_by_name(self):
+        likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        model = ExactGPModel(None, None, likelihood)
+        constraint = model.constraint_for_parameter_name('likelihood.noise_covar.raw_noise')
+        self.assertIsInstance(constraint, gpytorch.constraints.GreaterThan)
+        constraint = model.constraint_for_parameter_name('covar_module.base_kernel.raw_lengthscale')
+        self.assertIsInstance(constraint, gpytorch.constraints.Positive)
+        constraint = model.constraint_for_parameter_name('mean_module.constant')
+        self.assertIsNone(constraint)
+
+    def test_named_parameters_and_constraints(self):
+        likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        model = ExactGPModel(None, None, likelihood)
+        for (name, _param, constraint) in model.named_parameters_and_constraints():
+            if (name == 'likelihood.noise_covar.raw_noise'):
+                self.assertIsInstance(constraint, gpytorch.constraints.GreaterThan)
+            elif (name == 'mean_module.constant'):
+                self.assertIsNone(constraint)
+            elif (name == 'covar_module.raw_outputscale'):
+                self.assertIsInstance(constraint, gpytorch.constraints.Positive)
+            elif (name == 'covar_module.base_kernel.raw_lengthscale'):
+                self.assertIsInstance(constraint, gpytorch.constraints.Positive)
+if (__name__ == '__main__'):
+    unittest.main()
